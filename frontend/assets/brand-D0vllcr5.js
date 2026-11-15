@@ -1,0 +1,1 @@
+var e={name:`Asset Portal`,mark:`A`,tagline:`Hire · Train · Place`,description:`Asset Portal connects companies with trained, verified candidates and guides every person from first application to confirmed placement, all in one place.`};export{e as t};

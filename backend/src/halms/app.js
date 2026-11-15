@@ -1,0 +1,52 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { env } from './config/env.js';
+import { connectDb } from './config/db.js';
+import authRoutes from './routes/authRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import profileRoutes from './routes/profileRoutes.js';
+import jobRoutes from './routes/jobRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
+import teamRoutes from './routes/teamRoutes.js';
+import candidateRoutes from './routes/candidateRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
+import assistantRoutes from './routes/assistantRoutes.js';
+import supportRoutes from './routes/supportRoutes.js';
+import careersRoutes from './routes/careersRoutes.js';
+import applicantsRoutes from './routes/applicantsRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import walkinRoutes from './routes/walkinRoutes.js';
+import interviewRoutes from './routes/interviewRoutes.js';
+import employeeRoutes from './routes/employeeRoutes.js';
+import settingsRoutes from './routes/settingsRoutes.js';
+import { errorHandler } from './middleware/errors.js';
+
+// Mounted by the main server at /api (after /api/v1).
+export const halmsApp = express();
+halmsApp.use(helmet());
+halmsApp.use(cors({ origin: env.clientUrl, credentials: true }));
+halmsApp.use(express.json({ limit: '1mb' }));
+
+halmsApp.get('/health', (_req, res) => res.json({ status: 'ok' }));
+halmsApp.use('/auth', authRoutes);
+halmsApp.use('/admin', adminRoutes);
+halmsApp.use('/profile', profileRoutes);
+halmsApp.use('/jobs', jobRoutes);
+halmsApp.use('/public', publicRoutes);
+halmsApp.use('/team', teamRoutes);
+halmsApp.use('/candidates', candidateRoutes);
+halmsApp.use('/dashboard', dashboardRoutes);
+halmsApp.use('/assistant', assistantRoutes);
+halmsApp.use('/support', supportRoutes);
+halmsApp.use('/careers', careersRoutes);
+halmsApp.use('/applicants', applicantsRoutes);
+halmsApp.use('/notifications', notificationRoutes);
+halmsApp.use('/walkin', walkinRoutes);
+halmsApp.use('/interviews', interviewRoutes);
+halmsApp.use('/employees', employeeRoutes);
+halmsApp.use('/settings', settingsRoutes);
+halmsApp.use((_req, res) => res.status(404).json({ message: 'Route not found' }));
+halmsApp.use(errorHandler);
+
+export { connectDb as connectHalmsDb };

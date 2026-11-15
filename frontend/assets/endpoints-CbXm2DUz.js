@@ -1,0 +1,1 @@
+var e=`https://jobassets-backend.recruweb.com/api`,t=`https://jobassets-backend.recruweb.com/api/v1`;export{e as n,t};

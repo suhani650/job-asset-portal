@@ -1,0 +1,567 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  TRAINER
+  CANDIDATE
+}
+
+// Gate before login: a new sign-up is PENDING until an Admin reviews the resume.
+enum ApplicantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApplicationStatus {
+  APPLIED
+  TEST_COMPLETED
+  SHORTLISTED
+  INTERVIEW_SCHEDULED
+  INTERVIEWED
+  SELECTED
+  FEE_PAID
+  BOND_SIGNED
+  IN_TRAINING
+  READY_FOR_PLACEMENT
+  PLACED
+  REJECTED
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+}
+
+enum PaymentPlan {
+  ONE_TIME
+  INSTALLMENTS
+}
+
+enum PaymentMode {
+  ONLINE
+  CASH
+  BANK_TRANSFER
+}
+
+enum BondStatus {
+  PENDING
+  SIGNED
+}
+
+enum PlacementStatus {
+  OFFERED
+  PLACED
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  phone            String?
+  passwordHash     String
+  refreshTokenHash String?
+  role             Role     @default(CANDIDATE)
+  isActive         Boolean  @default(true)
+
+  // login gate (candidates only; staff are always allowed in)
+  applicantStatus  ApplicantStatus @default(PENDING)
+  resumePath       String?   // file name inside UPLOAD_DIR (never sent to the client)
+  resumeName       String?   // original file name, for download
+  reviewRemarks    String?  @db.Text
+  reviewedAt       DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  applications    Application[]
+  payments        Payment[]
+  bonds           Bond[]
+  attempts        TestAttempt[]
+  submissions     Submission[]
+  notifications   Notification[]
+  trainerBatches  Batch[]        @relation("TrainerBatches")
+  interviewsTaken Interview[]    @relation("Interviewer")
+  attendances     Attendance[]
+  memberships     BatchMember[]
+  resets          PasswordReset[]
+  progress        Progress[]
+  placements      Placement[]
+  policyAcceptances PolicyAcceptance[]
+  profile          CandidateProfile?
+  documents         Document[]
+
+  @@index([role])
+  @@index([applicantStatus])
+}
+
+model CandidateProfile {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  dob            DateTime?
+  gender         String?
+  altMobile      String?
+  address        String?  @db.Text
+  city           String?
+  state          String?
+  pincode        String?
+  qualification  String?
+  course         String?
+  college        String?
+  passingYear    Int?
+  score          String?
+  skills         String?  @db.Text
+  experienceType String?
+  expYears       Float?
+  currentCompany String?
+  noticePeriod   String?
+  interest       String?
+  jobRole        String?
+  prefLocation   String?
+  expectedSalary Int?
+  relocate       String?
+  linkedin       String?
+  source         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Track {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  description   String?  @db.Text
+  durationWeeks Int      @default(12)
+  fee           Int      @default(0) // in INR
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  applications Application[]
+  tests        Test[]
+  batches      Batch[]
+  feePlans     FeePlan[]
+  modules      TrainingModule[]
+}
+
+model Application {
+  id        String            @id @default(cuid())
+  userId    String
+  trackId   String
+  status    ApplicationStatus @default(APPLIED)
+  statement String?  @db.Text
+  resumeUrl String?  @db.Text
+  remarks   String?  @db.Text
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track      Track         @relation(fields: [trackId], references: [id])
+  attempts   TestAttempt[]
+  interviews Interview[]
+  payments   Payment[]
+  bond       Bond?
+  progress   Progress?
+  placement  Placement?
+  members    BatchMember[]
+
+  @@unique([userId, trackId])
+  @@index([status])
+  @@index([trackId])
+  @@index([userId])
+}
+
+model Test {
+  id           String   @id @default(cuid())
+  trackId      String
+  title        String
+  durationMins Int      @default(30)
+  passPercent  Int      @default(50)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  track     Track         @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  questions Question[]
+  attempts  TestAttempt[]
+  @@index([trackId])
+}
+
+model Question {
+  id           String @id @default(cuid())
+  testId       String
+  text         String  @db.Text
+  options      Json
+  correctIndex Int
+  marks        Int    @default(1)
+
+  test Test @relation(fields: [testId], references: [id], onDelete: Cascade)
+  @@index([testId])
+}
+
+model TestAttempt {
+  id            String    @id @default(cuid())
+  testId        String
+  applicationId String
+  userId        String
+  startedAt     DateTime  @default(now())
+  submittedAt   DateTime?
+  answers       Json?
+  score         Int       @default(0)
+  total         Int       @default(0)
+  percent       Float     @default(0)
+  passed        Boolean   @default(false)
+
+  test        Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, applicationId])
+  @@index([userId])
+}
+
+model Interview {
+  id            String          @id @default(cuid())
+  applicationId String
+  interviewerId String?
+  scheduledAt   DateTime
+  mode          String          @default("ONLINE")
+  link          String?  @db.Text
+  status        InterviewStatus @default(SCHEDULED)
+  rating        Int?
+  notes         String?  @db.Text
+  result        String?  @db.Text
+  createdAt     DateTime        @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  interviewer User?       @relation("Interviewer", fields: [interviewerId], references: [id])
+  @@index([applicationId])
+  @@index([interviewerId])
+}
+
+model FeePlan {
+  id             String      @id @default(cuid())
+  trackId        String
+  planType       PaymentPlan @default(ONE_TIME)
+  totalAmount    Int // INR
+  installments   Int         @default(1)
+  perInstallment Int?
+  discountPct    Float? // percentage
+  lateFee        Int?
+  isActive       Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+
+  track    Track     @relation(fields: [trackId], references: [id])
+  payments Payment[]
+
+  @@index([trackId])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  applicationId     String
+  userId            String
+  feePlanId         String?
+  installmentNo     Int           @default(1)
+  amount            Int
+  currency          String        @default("INR")
+  status            PaymentStatus @default(CREATED)
+  mode              PaymentMode   @default(ONLINE)
+  razorpayOrderId   String?       @unique
+  razorpayPaymentId String?
+  receiptNo         String?       @unique
+  adminNotes        String?  @db.Text
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feePlan     FeePlan?    @relation(fields: [feePlanId], references: [id])
+
+  @@index([applicationId])
+  @@index([userId])
+  @@index([status, createdAt])
+}
+
+model Bond {
+  id            String     @id @default(cuid())
+  applicationId String     @unique
+  userId        String
+  months        Int
+  amount        Int
+  terms         String  @db.LongText
+  status        BondStatus @default(PENDING)
+  otpHash       String?
+  otpExpiresAt  DateTime?
+  signedAt      DateTime?
+  signedIp      String?
+  createdAt     DateTime   @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Batch {
+  id        String   @id @default(cuid())
+  trackId   String
+  name      String
+  trainerId String?
+  startDate DateTime
+  endDate   DateTime?
+  createdAt DateTime @default(now())
+
+  track       Track         @relation(fields: [trackId], references: [id])
+  trainer     User?         @relation("TrainerBatches", fields: [trainerId], references: [id])
+  members     BatchMember[]
+  sessions    Session[]
+  assignments Assignment[]
+  @@index([trackId])
+  @@index([trainerId])
+}
+
+model BatchMember {
+  id            String @id @default(cuid())
+  batchId       String
+  applicationId String
+  userId        String
+
+  batch       Batch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, applicationId])
+  @@index([userId])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  batchId    String
+  title      String
+  date       DateTime
+  contentUrl String?  @db.Text
+
+  batch       Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  attendances Attendance[]
+  @@index([batchId, date])
+}
+
+model Attendance {
+  id        String  @id @default(cuid())
+  sessionId String
+  userId    String
+  present   Boolean @default(false)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  batchId     String
+  title       String
+  description String?  @db.Text
+  dueDate     DateTime
+  maxMarks    Int      @default(100)
+
+  batch       Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+  @@index([batchId])
+}
+
+model Submission {
+  id           String   @id @default(cuid())
+  assignmentId String
+  userId       String
+  text         String?  @db.Text
+  fileUrl      String?  @db.Text
+  marks        Int?
+  feedback     String?  @db.Text
+  submittedAt  DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, userId])
+  @@index([userId])
+}
+
+model Progress {
+  id            String    @id @default(cuid())
+  applicationId String    @unique
+  userId        String
+  attendancePct Float     @default(0)
+  assignmentPct Float     @default(0)
+  testPct       Float     @default(0)
+  trainerRating Int       @default(0)
+  overallPct    Float     @default(0)
+  certificateNo String?   @unique
+  certifiedAt   DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Client {
+  id           String   @id @default(cuid())
+  name         String
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  createdAt    DateTime @default(now())
+
+  placements   Placement[]
+  requirements Requirement[]
+}
+
+model Requirement {
+  id          String    @id @default(cuid())
+  clientId    String
+  title       String
+  description String?  @db.Text
+  skills      Json
+  positions   Int       @default(1)
+  filled      Int       @default(0)
+  deadline    DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  client     Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  placements Placement[]
+
+  @@index([clientId])
+}
+
+model Placement {
+  id            String          @id @default(cuid())
+  applicationId String          @unique
+  userId        String
+  clientId      String
+  requirementId String?
+  roleTitle     String
+  packageLpa    Float?
+  status        PlacementStatus @default(OFFERED)
+  placedAt      DateTime?
+  createdAt     DateTime        @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client      Client      @relation(fields: [clientId], references: [id])
+  requirement Requirement? @relation(fields: [requirementId], references: [id])
+  @@index([clientId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String  @db.Text
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model Policy {
+  id        String   @id @default(cuid())
+  title     String
+  content   String  @db.LongText
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  acceptances PolicyAcceptance[]
+}
+
+model PolicyAcceptance {
+  id         String   @id @default(cuid())
+  policyId   String
+  userId     String
+  acceptedAt DateTime @default(now())
+
+  policy Policy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, userId])
+  @@index([userId])
+}
+ 
+enum ModuleType {
+  VIDEO
+  PDF
+  LINK
+  NOTES
+}
+
+enum DocumentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model TrainingModule {
+  id          String     @id @default(cuid())
+  trackId     String
+  title       String
+  description String?  @db.Text
+  type        ModuleType @default(LINK)
+  url         String?  @db.Text
+  position    Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId, position])
+}
+
+model Document {
+  id        String         @id @default(cuid())
+  userId    String
+  type      String
+  fileName  String
+  filePath  String  @db.Text
+  mimeType  String?
+  size      Int?
+  status    DocumentStatus @default(PENDING)
+  remarks   String?  @db.Text
+  createdAt DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
